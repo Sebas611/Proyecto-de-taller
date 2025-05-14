@@ -5,6 +5,10 @@ import random
 import json
 import os
 
+os.makedirs("partidas", exist_ok=True)
+ruta = os.path.join("partidas", "guardado1.txt")
+
+
 TAM = 6
 TAM_CELDA = 50
 VIRUS = 1
@@ -109,9 +113,6 @@ class VirusSpreadGame:
             if not self.verificar_fin_juego():
                 self.root.after(1000, self.ejecutar_turno)
 
-
-
-
     def verificar_fin_juego(self):
         libres = any(LIBRE in fila for fila in self.matriz)
         if not libres:
@@ -141,8 +142,15 @@ class VirusSpreadGame:
         if usuario_actual is None:
             return
 
-        nombre = f"partida_usuario_{usuario_actual}.bin"
-        with open(nombre, "wb") as archivo:
+        nombre = tk.simpledialog.askstring("Guardar partida", "Nombre de la partida:")
+        if not nombre:
+            return
+
+        dir_usuario = f"partidas_usuario_{usuario_actual}"
+        os.makedirs(dir_usuario, exist_ok=True)
+        archivo_path = os.path.join(dir_usuario, f"{nombre}.bin")
+
+        with open(archivo_path, "wb") as archivo:
             archivo.write(TAM.to_bytes(2, "big"))
             archivo.write((1).to_bytes(1, "big"))
             for fila in self.matriz:
@@ -150,13 +158,14 @@ class VirusSpreadGame:
                 hexadecimal = hex(numero)[2:].zfill((TAM + 1) // 2)
                 archivo.write(bytes.fromhex(hexadecimal))
 
-    def cargar_partida(self):
-        if usuario_actual is None:
-            return
+        messagebox.showinfo("Guardado", f"Partida '{nombre}' guardada exitosamente.")
 
-        nombre = f"partida_usuario_{usuario_actual}.bin"
+    def cargar_partida(self, nombre_partida):
+        dir_usuario = f"partidas_usuario_{usuario_actual}"
+        archivo_path = os.path.join(dir_usuario, f"{nombre_partida}.bin")
+
         try:
-            with open(nombre, "rb") as archivo:
+            with open(archivo_path, "rb") as archivo:
                 tam = int.from_bytes(archivo.read(2), "big")
                 nivel = int.from_bytes(archivo.read(1), "big")
 
@@ -178,7 +187,8 @@ class VirusSpreadGame:
                 self.root.after(1000, self.ejecutar_turno)
 
         except FileNotFoundError:
-            messagebox.showerror("Error", "No hay partida guardada para este usuario.")
+            messagebox.showerror("Error", "No se pudo cargar la partida.")
+
 
 def login():
     global usuario_actual
@@ -187,9 +197,7 @@ def login():
         if user["user"] == NombreUsuario:
             usuario_actual = user["id"]
             ventana_login.destroy()
-            ventana_juego = tk.Tk()
-            VirusSpreadGame(ventana_juego)
-            ventana_juego.mainloop()
+            menu_principal()
             return
     messagebox.showerror("Error", "Usuario no encontrado")
 
@@ -228,6 +236,72 @@ def cargar_datos():
     if os.path.exists(USUARIOS_FILE):
         with open(USUARIOS_FILE, "r") as f:
             usuarios.extend(json.load(f))
+
+def menu_principal():
+    menu = tk.Tk()
+    menu.title("Menú Principal")
+
+    tk.Label(menu, text=f"Bienvenido, {usuario_actual}", font=("Arial", 14)).pack(pady=10)
+
+    def nueva_partida():
+        menu.destroy()
+        ventana_juego = tk.Tk()
+        VirusSpreadGame(ventana_juego)
+        ventana_juego.mainloop()
+
+    def cargar_partida():
+        menu.destroy()
+        ventana_cargar_partida()
+
+    tk.Button(menu, text="Nueva Partida", command=nueva_partida, width=20).pack(pady=5)
+    tk.Button(menu, text="Cargar Partida", command=cargar_partida, width=20).pack(pady=5)
+    tk.Button(menu, text="Salir", command=menu.destroy, width=20).pack(pady=5)
+
+    menu.mainloop()
+
+def ventana_cargar_partida():
+    if usuario_actual is None:
+        return
+
+    ventana = tk.Toplevel()
+    ventana.title("Cargar Partida")
+
+    dir_usuario = f"partidas_usuario_{usuario_actual}"
+    os.makedirs(dir_usuario, exist_ok=True)
+    archivos = [f[:-4] for f in os.listdir(dir_usuario) if f.endswith(".bin")]
+
+    lista = tk.Listbox(ventana, width=40)
+    lista.pack(padx=10, pady=10)
+
+    for partida in archivos:
+        lista.insert(tk.END, partida)
+
+    def abrir():
+        seleccion = lista.curselection()
+        if not seleccion:
+            messagebox.showerror("Error", "Selecciona una partida.")
+            return
+        nombre_partida = lista.get(seleccion[0])
+        ventana.destroy()
+        ventana_juego = tk.Tk()
+        juego = VirusSpreadGame(ventana_juego)
+        juego.cargar_partida(nombre_partida)
+        ventana_juego.mainloop()
+
+    def eliminar():
+        seleccion = lista.curselection()
+        if not seleccion:
+            messagebox.showerror("Error", "Selecciona una partida.")
+            return
+        nombre_partida = lista.get(seleccion[0])
+        confirmacion = messagebox.askyesno("Eliminar", f"¿Eliminar partida '{nombre_partida}'?")
+        if confirmacion:
+            os.remove(os.path.join(dir_usuario, f"{nombre_partida}.bin"))
+            lista.delete(seleccion[0])
+
+    tk.Button(ventana, text="Abrir Partida", command=abrir).pack(pady=5)
+    tk.Button(ventana, text="Eliminar Partida", command=eliminar).pack(pady=5)
+
 
 def main():
     global ventana_login, entry_usuario
